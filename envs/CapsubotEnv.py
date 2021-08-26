@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from scipy.constants import g as GRAVITY_CONSTANT
 import scipy.integrate
+import pyglet
 
 MIN_VOLTAGE = 0.0
 MAX_VOLTAGE = 24.0
@@ -35,12 +36,16 @@ class CapsubotEnv(gym.Env):
         # self.is_right_movement = True
         self.total_time = None
         self.state = None
+        self.average_speed = 0
         self.M = 0.193
         self.m = 0.074
         self.stiffness = 256.23
         self.force_max = 1.25
-        self.mu = 0.29 # Coefficient of friction.
-        self.dt = 0.01 # Action force discritization.
+        self.mu = 0.29  # Coefficient of friction.
+
+        steps_in_period = 200
+        min_period = 0.01
+        self.dt = min_period/steps_in_period  # Action force discritization.
 
         self.action_space = spaces.Box(
             low=MIN_VOLTAGE, high=MAX_VOLTAGE, shape=(1, 1)  # mb need to cast to nparray?
@@ -52,7 +57,6 @@ class CapsubotEnv(gym.Env):
             shape=(4,),
             dtype=np.float16,
         )
-
 
         self.viewer = None
         self.seed()
@@ -69,7 +73,14 @@ class CapsubotEnv(gym.Env):
 
     def friction_model(self, velocity):
         N = (self.M + self.m) * GRAVITY_CONSTANT
-        return -np.sign(velocity) * N * self.mu
+        return -N * 2 / np.pi * np.arctan(velocity * 10e5)
+        # return -np.sign(velocity) * N * self.mu
+
+    # def F_fr(x, eps):
+    # """
+    # Defines friction force
+    # """
+    # return -eps*2/np.pi*np.arctan(x*10E5)
 
     def mechanical_model(self, y, t, force):
         x, x_dot, xi, xi_dot = y
@@ -82,10 +93,12 @@ class CapsubotEnv(gym.Env):
         x, x_dot, xi, xi_dot = self.state
         force = self.force_model(action)
 
-        if (integrator=="ode"):
+        if integrator == "ode":
             y0 = [x, x_dot, xi, xi_dot]
             t = [0, self.dt]
-            sol = scipy.integrate.odeint(self.mechanical_model, y0, t, args=(force,)) # Need to investigate why euler integration didn't work
+            sol = scipy.integrate.odeint(
+                self.mechanical_model, y0, t, args=(force,)
+            )  # Need to investigate why euler integration didn't work
             self.state = [item for item in sol[-1]]
         else:
             # Euler kinematic integration.
@@ -98,9 +111,9 @@ class CapsubotEnv(gym.Env):
             ]
 
         self.total_time = self.total_time + self.dt
-        average_speed = x / self.total_time
+        self.average_speed = x / self.total_time
 
-        reward = 1 if average_speed > 0 and x_dot > 0 else 0  # FIXME
+        reward = 1 if self.average_speed > 0 and x_dot > 0 else 0  # FIXME
         done = x < -1 or x > 5  # FIXME
 
         return self.state, reward, done, {}
@@ -117,7 +130,7 @@ class CapsubotEnv(gym.Env):
         capsule_length = 100.0
         capsule_height = 30.0
 
-        world_width = 5.0
+        world_width = 1.0
         scale = screen_width / world_width
 
         inner_body_length = capsule_length / 2.0
@@ -130,7 +143,6 @@ class CapsubotEnv(gym.Env):
             from gym.envs.classic_control import rendering
 
             self.viewer = rendering.Viewer(screen_width, screen_height)
-
             # Capsule polygon.
             l, r, t, b = (
                 -capsule_length / 2,
@@ -162,6 +174,17 @@ class CapsubotEnv(gym.Env):
             self.track.set_color(0, 0, 0)
             self.viewer.add_geom(self.track)
 
+            # Score
+            self.score_label = pyglet.text.Label(
+                "0000",
+                font_size=36,
+                x=20,
+                y=screen_width * 2.5 / 40.00,
+                anchor_x="left",
+                anchor_y="center",
+                color=(255, 255, 255, 255),
+            )
+
         if self.state is None:
             return None
 
@@ -172,6 +195,9 @@ class CapsubotEnv(gym.Env):
 
         inner_body_x = xi * scale  # MIDDLE OF CART
         self.inner_body_transform.set_translation(inner_body_x, inner_body_y)
+
+        self.score_label.text = "%04i" % self.average_speed
+        self.score_label.draw()
 
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 
