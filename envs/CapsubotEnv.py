@@ -5,9 +5,10 @@ from gym import spaces
 from gym.utils import seeding
 import pandas as pd
 import numpy as np
-from scipy.constants import g as GRAVITY_CONSTANT
+import scipy.constants
 import scipy.integrate
 import pyglet
+import math
 
 MIN_VOLTAGE = 0.0
 MAX_VOLTAGE = 24.0
@@ -15,10 +16,10 @@ MAX_VOLTAGE = 24.0
 MIN_X = -10.0
 MAX_X = -MIN_X
 
-MIN_XI = -10.0
+MIN_XI = -1.0
 MAX_XI = -MIN_XI
 
-MIN_DX = -1.0
+MIN_DX = -10.0
 MAX_DX = -MIN_DX
 MIN_DXI = MIN_DX
 MAX_DXI = -MIN_DX
@@ -30,8 +31,9 @@ class CapsubotEnv(gym.Env):
     metadata = {"render.modes": ["live", "file", "none"]}
     visualization = None
 
-    def __init__(self):
+    def __init__(self, force="trivial"):
         super(CapsubotEnv, self).__init__()
+        self.force = force
 
         # self.is_right_movement = True
         self.total_time = None
@@ -45,42 +47,43 @@ class CapsubotEnv(gym.Env):
 
         steps_in_period = 200
         min_period = 0.01
-        self.dt = min_period/steps_in_period  # Action force discritization.
-
-        self.action_space = spaces.Box(
-            low=MIN_VOLTAGE, high=MAX_VOLTAGE, shape=(1, 1)  # mb need to cast to nparray?
-        )
+        self.dt = min_period / steps_in_period  # Action force discritization.
+        self.action_space = spaces.Discrete(2)
 
         self.observation_space = spaces.Box(
             low=np.array([MIN_X, MIN_DX, MIN_XI, MIN_DXI]),
             high=np.array([MAX_X, MAX_DX, MAX_XI, MAX_DXI]),
-            shape=(4,),
-            dtype=np.float16,
+            dtype=np.float32,
         )
 
         self.viewer = None
         self.seed()
-        self.reset()
-
-        # add physical parameters
 
     def seed(self, seed=42):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def force_model(self, voltage):
-        return voltage
+    def force_model(self, voltage, force="trivial"):
+        if force == "trivial":
+            return voltage
+        if force == "step":
+            return 1.25 if voltage == 1 else 0.0
+        if force == "em":
+            # Force model from Nikita.
+            v = voltage
+            alpha = math.log10(mu_r)
+            # Where is R? Active resistance of the coil.
+            r_a = 1  # Radius of of the coil winding
+            r_0 = 0.75  # Inner radius of the coil
+            lamda = rho / alpha  # Or here is a?
+            part1 = -v * v * mu_r * mu_0 / 8 / math.pi / lamda / lamda / l / l
+            part2 = (r0 / r_a) * (r0 / r_a) * alpha * np.exp(-alpha / l * x)
+            return part1 * part2
 
     def friction_model(self, velocity):
-        N = (self.M + self.m) * GRAVITY_CONSTANT
+        N = (self.M + self.m) * scipy.constants.g
         return -N * 2 / np.pi * np.arctan(velocity * 10e5)
         # return -np.sign(velocity) * N * self.mu
-
-    # def F_fr(x, eps):
-    # """
-    # Defines friction force
-    # """
-    # return -eps*2/np.pi*np.arctan(x*10E5)
 
     def mechanical_model(self, y, t, force):
         x, x_dot, xi, xi_dot = y
@@ -89,9 +92,9 @@ class CapsubotEnv(gym.Env):
         xi_acc = (-self.stiffness * xi + force) / self.m - x_acc
         return [x_dot, x_acc, xi_dot, xi_acc]
 
-    def step(self, action, integrator="ode"):
+    def step(self, action, integrator="euler"):
         x, x_dot, xi, xi_dot = self.state
-        force = self.force_model(action)
+        force = self.force_model(action, force=self.force)  # Choose right force model.
 
         if integrator == "ode":
             y0 = [x, x_dot, xi, xi_dot]
@@ -116,12 +119,12 @@ class CapsubotEnv(gym.Env):
         reward = 1 if self.average_speed > 0 and x_dot > 0 else 0  # FIXME
         done = x < -1 or x > 5  # FIXME
 
-        return self.state, reward, done, {}
+        return np.array(self.state), reward, done, {}
 
     def reset(self):
         self.state = (0, 0, 0, 0)
         self.total_time = 0.0
-        return self.state
+        return np.array(self.state).astype(np.float32)
 
     def render(self, mode="human"):
         screen_width = 1280
