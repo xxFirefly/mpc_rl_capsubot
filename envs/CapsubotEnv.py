@@ -86,10 +86,12 @@ class CapsubotEnv(gym.Env):
         # return -np.sign(velocity) * N * self.mu
 
     def mechanical_model(self, y, t, force):
-        x, x_dot, xi, xi_dot = y
+        x, x_dot, xi, xi_dot, i = y
         friction = self.friction_model(x_dot)
         x_acc = (self.stiffness * xi - force + friction) / self.M
         xi_acc = (-self.stiffness * xi + force) / self.m - x_acc
+        i_dot = (u - i*R - i - func_L_dot(xi) * xi_dot)/ func_L(xi)
+
         return [x_dot, x_acc, xi_dot, xi_acc]
 
     def step(self, action, integrator="euler"):
