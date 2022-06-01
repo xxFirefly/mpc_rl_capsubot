@@ -28,7 +28,7 @@ MAX_DXI = -MIN_DX
 class CapsubotEnv(gym.Env):
     """A cabsubot with electromagnetic coil"""
 
-    metadata = {"render.modes": ["live", "file", "none"]}
+    metadata = {"render.modes": ["live", "file", "none", "human"]}
     visualization = None
 
     def __init__(self, force="trivial"):
@@ -45,10 +45,11 @@ class CapsubotEnv(gym.Env):
         self.force_max = 1.25
         self.mu = 0.29  # Coefficient of friction.
 
-        steps_in_period = 200
-        min_period = 0.01
-        self.dt = min_period / steps_in_period  # Action force discritization.
+        self.steps_in_period = 200
+        self.min_period = 0.01
+        self.dt = self.min_period / self.steps_in_period  # Action force discritization.
         self.action_space = spaces.Discrete(2)
+        self.frame_skip = 20
 
         self.observation_space = spaces.Box(
             low=np.array([MIN_X, MIN_DX, MIN_XI, MIN_DXI]),
@@ -93,31 +94,39 @@ class CapsubotEnv(gym.Env):
         return [x_dot, x_acc, xi_dot, xi_acc]
 
     def step(self, action, integrator="euler"):
-        x, x_dot, xi, xi_dot = self.state
-        force = self.force_model(action, force=self.force)  # Choose right force model.
+        for _ in range(self.frame_skip):
+            x, x_dot, xi, xi_dot = self.state
+            force = self.force_model(action, force=self.force)  # Choose right force model.
 
-        if integrator == "ode":
-            y0 = [x, x_dot, xi, xi_dot]
-            t = [0, self.dt]
-            sol = scipy.integrate.odeint(
-                self.mechanical_model, y0, t, args=(force,)
-            )  # Need to investigate why euler integration didn't work
-            self.state = [item for item in sol[-1]]
-        else:
-            # Euler kinematic integration.
-            dx = self.mechanical_model(self.state, 0, force)
-            self.state = [
-                x + self.dt * dx[0],
-                x_dot + self.dt * dx[1],
-                xi + self.dt * dx[2],
-                xi_dot + self.dt * dx[3],
-            ]
+            if integrator == "ode":
+                y0 = [x, x_dot, xi, xi_dot]
+                t = [0, self.dt]
+                sol = scipy.integrate.odeint(
+                    self.mechanical_model, y0, t, args=(force,)
+                )  # Need to investigate why euler integration didn't work
+                self.state = [item for item in sol[-1]]
+            else:
+                # Euler kinematic integration.
+                dx = self.mechanical_model(self.state, 0, force)
+                self.state = [
+                    x + self.dt * dx[0],
+                    x_dot + self.dt * dx[1],
+                    xi + self.dt * dx[2],
+                    xi_dot + self.dt * dx[3],
+                ]
 
-        self.total_time = self.total_time + self.dt
-        self.average_speed = x / self.total_time
+            self.total_time = self.total_time + self.dt
+            self.average_speed = x / self.total_time
 
-        reward = 1 if self.average_speed > 0 and x_dot > 0 else 0  # FIXME
-        done = x < -1 or x > 5  # FIXME
+        reward = 0
+        done = False
+        if x < -0.2:
+            done = True
+            reward -= 100
+        if x == 1 and x_dot == 0 and xi_dot == 0:
+            done = True
+            reward += 1500   # За остановку в целевой точке
+        reward -= 0.0001     # За каждый таймстеп пока робот не остановился в целевой точке, он штрафуется
 
         return np.array(self.state), reward, done, {}
 
