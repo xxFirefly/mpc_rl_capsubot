@@ -31,9 +31,8 @@ class CapsubotEnv(gym.Env):
     metadata = {"render.modes": ["live", "file", "none", "human"]}
     visualization = None
 
-    def __init__(self, force="trivial"):
+    def __init__(self):
         super(CapsubotEnv, self).__init__()
-        self.force = force
 
         # self.is_right_movement = True
         self.total_time = None
@@ -48,8 +47,9 @@ class CapsubotEnv(gym.Env):
         self.steps_in_period = 200
         self.min_period = 0.01
         self.dt = self.min_period / self.steps_in_period  # Action force discritization.
-        self.action_space = spaces.Discrete(2)
         self.frame_skip = 20
+
+        self.action_space = spaces.Discrete(2)
 
         self.observation_space = spaces.Box(
             low=np.array([MIN_X, MIN_DX, MIN_XI, MIN_DXI]),
@@ -64,22 +64,9 @@ class CapsubotEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def force_model(self, voltage, force="trivial"):
-        if force == "trivial":
-            return voltage
-        if force == "step":
-            return 1.25 if voltage == 1 else 0.0
-        if force == "em":
-            # Force model from Nikita.
-            v = voltage
-            alpha = math.log10(mu_r)
-            # Where is R? Active resistance of the coil.
-            r_a = 1  # Radius of of the coil winding
-            r_0 = 0.75  # Inner radius of the coil
-            lamda = rho / alpha  # Or here is a?
-            part1 = -v * v * mu_r * mu_0 / 8 / math.pi / lamda / lamda / l / l
-            part2 = (r0 / r_a) * (r0 / r_a) * alpha * np.exp(-alpha / l * x)
-            return part1 * part2
+    def F_step(self, t, T, tau):
+        part = t / T - t // T
+        return 1. if part < tau else 0.
 
     def friction_model(self, velocity):
         N = (self.M + self.m) * scipy.constants.g
@@ -94,39 +81,49 @@ class CapsubotEnv(gym.Env):
         return [x_dot, x_acc, xi_dot, xi_acc]
 
     def step(self, action, integrator="euler"):
+        err_msg = f"{action!r} ({type(action)}) invalid"
+        assert self.action_space.contains(action), err_msg
+
         for _ in range(self.frame_skip):
             x, x_dot, xi, xi_dot = self.state
-            force = self.force_model(action, force=self.force)  # Choose right force model.
 
-            if integrator == "ode":
-                y0 = [x, x_dot, xi, xi_dot]
-                t = [0, self.dt]
-                sol = scipy.integrate.odeint(
-                    self.mechanical_model, y0, t, args=(force,)
-                )  # Need to investigate why euler integration didn't work
-                self.state = [item for item in sol[-1]]
+            if action == 1:
+                self.force = self.F_step(self.total_time, T=0.1, tau=0.7)
             else:
-                # Euler kinematic integration.
-                dx = self.mechanical_model(self.state, 0, force)
-                self.state = [
-                    x + self.dt * dx[0],
-                    x_dot + self.dt * dx[1],
-                    xi + self.dt * dx[2],
-                    xi_dot + self.dt * dx[3],
-                ]
+                self.force = 0.
+
+            # Euler kinematic integration.
+            dx = self.mechanical_model(self.state, 0, self.force)
+            self.state = [
+                x + self.dt * dx[0],
+                x_dot + self.dt * dx[1],
+                xi + self.dt * dx[2],
+                xi_dot + self.dt * dx[3],
+            ]
 
             self.total_time = self.total_time + self.dt
             self.average_speed = x / self.total_time
 
         reward = 0
         done = False
-        if x < -0.2:
+        if abs(self.average_speed) > 0.:
+            reward += 1 + abs(self.average_speed) * 100
+        if x >= abs(0.1):
             done = True
-            reward -= 100
-        if x == 1 and x_dot == 0 and xi_dot == 0:
+            reward += 500
+
+        """
+        if x <= -0.08:
             done = True
-            reward += 1500   # За остановку в целевой точке
-        reward -= 0.0001     # За каждый таймстеп пока робот не остановился в целевой точке, он штрафуется
+            reward += 1500
+
+        #if x == -0.08 and x_dot == 0 and xi_dot == 0:
+            #done = True
+            #reward += 1500   # За остановку в целевой точке
+
+        if not done:
+            reward -= 0.0001     # За каждый таймстеп пока робот не остановился в целевой точке, он штрафуется
+        """
 
         return np.array(self.state), reward, done, {}
 
