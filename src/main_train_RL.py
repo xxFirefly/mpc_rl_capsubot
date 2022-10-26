@@ -4,13 +4,13 @@ import os
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 
-from src.capsubot_env.capsubot_env import CapsubotEnv
+from src.capsubot_env.capsubot_env import CapsubotEnv, CapsubotEnvToPoint
 from src.capsubot_env.custom_logger import SummaryWriterCallback
 
 # HYPERPARAMS
 # TODO: implement LR schedule
 # TODO: play with hyperparams more
-N_ENVS: int = 1
+N_ENVS: int = 4
 LEARNING_RATE: float = float(3.0e-4)
 TIMESTEPS: float = 1e5
 N_STEPS = 4096
@@ -19,21 +19,27 @@ N_EPOCHS = 10
 # GAMMA =
 # GAE_LAMBDA =
 
-MAX_SPEED_VER = "PPO-"
-TO_POINT_VER = "TO_POINT_PPO-"
 
-
-def main(ver: str = MAX_SPEED_VER):
+def main(max_speed_ver: bool):
     additional_info_str = f"n_envs_{N_ENVS}_LR_{str(LEARNING_RATE)[2:]}_Nsteps_{N_STEPS}_Nepochs_{N_EPOCHS}" + datetime.datetime.now().strftime(
         "%d_%m_%Y-%H"
     )
 
+    if max_speed_ver:
+        ver = "PPO-"
+        sub_folder = "max_speed"
+        env = CapsubotEnv()
+    else:
+        ver = "TO_POINT_PPO-"
+        sub_folder = "to_point"
+        env = CapsubotEnvToPoint()
+
     models_dir: str = os.path.join(
-        "RL_WIP", "RL_data_store", "models", ver
+        "RL_WIP", "RL_data_store", "models", sub_folder, ver
     ) + additional_info_str
 
     logdir: str = os.path.join(
-        "RL_WIP", "RL_data_store", "logs", ver
+        "RL_WIP", "RL_data_store", "logs", sub_folder, ver
     ) + additional_info_str
 
     if not os.path.exists(models_dir):
@@ -42,7 +48,6 @@ def main(ver: str = MAX_SPEED_VER):
     if not os.path.exists(logdir):
         os.makedirs(logdir)
 
-    env = CapsubotEnv()
     env = make_vec_env(lambda: env, n_envs=N_ENVS)
 
     model = PPO(
@@ -66,4 +71,4 @@ def main(ver: str = MAX_SPEED_VER):
 
 
 if __name__ == "__main__":
-    main(ver=MAX_SPEED_VER)
+    main(max_speed_ver=False)
