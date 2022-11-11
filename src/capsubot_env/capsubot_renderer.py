@@ -23,17 +23,10 @@ class Renderer:
         self,
         name: str,
         render_target_region: bool,
-        goal_point: Optional[float] = None,
-        tolerance: Optional[float] = None,
     ):
         self.render_target_region = render_target_region
-
-        if self.render_target_region:
-            assert (goal_point is not None) and (
-                tolerance is not None
-            ), "Enter goal point and tolerance!"
-            self.goal_point = goal_point
-            self.tolerance = tolerance
+        self.goal_point = None
+        self.tolerance = None
 
         pygame.init()
         pygame.display.set_caption(name)
@@ -75,6 +68,21 @@ class Renderer:
             self.screen,
             self.GREEN,
             (
+                self.SCREEN_SIZE[0] / 2
+                + (self.goal_point - self.tolerance / 2) * self.SCALE,
+                self.GROUND_LEVEL - 100,
+            ),
+            (
+                self.SCREEN_SIZE[0] / 2
+                + (self.goal_point - self.tolerance / 2) * self.SCALE,
+                self.GROUND_LEVEL + 100,
+            ),
+        )
+
+        pygame.draw.line(
+            self.screen,
+            self.GREEN,
+            (
                 self.SCREEN_SIZE[0] / 2 + self.goal_point * self.SCALE,
                 self.GROUND_LEVEL - 100,
             ),
@@ -89,12 +97,12 @@ class Renderer:
             self.GREEN,
             (
                 self.SCREEN_SIZE[0] / 2
-                + (self.goal_point + self.tolerance) * self.SCALE,
+                + (self.goal_point + self.tolerance / 2) * self.SCALE,
                 self.GROUND_LEVEL - 100,
             ),
             (
                 self.SCREEN_SIZE[0] / 2
-                + (self.goal_point + self.tolerance) * self.SCALE,
+                + (self.goal_point + self.tolerance / 2) * self.SCALE,
                 self.GROUND_LEVEL + 100,
             ),
         )
@@ -121,6 +129,22 @@ class Renderer:
         if self.render_target_region:
             self._draw_target_region()
         pygame.display.update()
+
+    @property
+    def goal_point(self):
+        return self._goal_point
+
+    @goal_point.setter
+    def goal_point(self, goal_point):
+        self._goal_point = goal_point
+
+    @property
+    def tolerance(self):
+        return self._tolerance
+
+    @tolerance.setter
+    def tolerance(self, tolerance):
+        self._tolerance = tolerance
 
     @staticmethod
     def quit() -> None:
