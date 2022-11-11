@@ -134,7 +134,9 @@ __pycache__
 
 # some WIP stuff
 RL_data_store/
-some_model_examples/
+RL_WIP/some_model_examples/
 *.png
 RL_WIP/*.md
 bufer_for_ideas.py
+RL_WIP/RL_vs_old_model.py
+test.py

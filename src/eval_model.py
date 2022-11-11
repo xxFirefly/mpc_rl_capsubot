@@ -72,12 +72,12 @@ def eval_model(
             if (
                 reward > 0.0
             ):  # dict looks like {"model_name": time when done is reached}
-                good_models[f"{int(saved_model_name * 1e5)}"] = env.total_time
+                good_models[f"{int(saved_model_name * 1e5)}"] = info.get("total_time")
             else:
-                fail_models[f"{int(saved_model_name * 1e5)}"] = env.total_time
+                fail_models[f"{int(saved_model_name * 1e5)}"] = info.get("total_time")
             break
         else:  # Such models that don't reach any done points for 3k timesteps are bad too
-            fail_models[f"{int(saved_model_name * 1e5)}"] = env.total_time
+            fail_models[f"{int(saved_model_name * 1e5)}"] = info.get("total_time")
     env.close()
     eval_info.update(
         [
@@ -100,8 +100,12 @@ def choose_best(models_dict: dict) -> None:
 def main() -> None:
     env = CapsubotEnv()
     good_models, fail_models, eval_info = load_and_eval_model(
-        directory="PPO-n_envs_1_LR_00025_12_09_2022-21", env=env
+        directory="PPO-n_envs_1_LR_00025_nsteps_409613_09_2022-04", env=env
     )
+    print(f"good_models_dict{good_models}")
+    print("__________________________________________")
+    print(f"bad_models_dict{fail_models}")
+    print("__________________________________________")
     choose_best(good_models)
 
 

@@ -1,6 +1,15 @@
+from typing import List
+
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import TensorBoardOutputFormat
+
+
+def dict_to_list(item):
+    item = item.get("obs_state")
+    if isinstance(item, dict):
+        return item.get("agent")
+    return item
 
 
 class SummaryWriterCallback(BaseCallback):
@@ -19,49 +28,42 @@ class SummaryWriterCallback(BaseCallback):
             list_of_av_speeds = [
                 item.get("average_speed") for item in self.locals.get("infos")
             ]
-            list_of_x_pos = [
-                item.get("current_pos") for item in self.locals.get("infos")
-            ]
+            list_of_x_pos = [dict_to_list(item)[0] for item in self.locals.get("infos")]
             list_of_x_velocities = [
-                item.get("center_mass_velocity") for item in self.locals.get("infos")
+                dict_to_list(item)[1] for item in self.locals.get("infos")
             ]
-            list_of_dones = [item.get("dones") for item in self.locals.get("infos")]
-            average_speed = np.array(sum(list_of_av_speeds) / len(list_of_av_speeds))
+            list_of_t_times = [
+                item.get("total_time") for item in self.locals.get("infos")
+            ]
+            list_of_goal_points = [
+                item.get("goal_point") for item in self.locals.get("infos")
+            ]
 
+            average_speed = np.array(sum(list_of_av_speeds) / len(list_of_av_speeds))
             self.tb_formatter.writer.add_scalar(
                 "average_speed_train/average_speed_mean",
                 average_speed,
                 self.num_timesteps,
             )
 
-            if sum(list_of_x_pos) != 0:
-                for i in range(len(list_of_x_pos)):
-                    self.tb_formatter.writer.add_scalar(
-                        f"positions/x_pos_of_{i + 1}",
-                        list_of_x_pos[i],
-                        self.num_timesteps,
-                    )
-
-            if sum(list_of_x_velocities) != 0:
-                for i in range(len(list_of_x_velocities)):
-                    self.tb_formatter.writer.add_scalar(
-                        f"velocities/x_velocity_of_{i + 1}",
-                        list_of_x_velocities[i],
-                        self.num_timesteps,
-                    )
-
-            if sum(list_of_dones) != 0:
-                for i in range(len(list_of_dones)):
-                    self.tb_formatter.writer.add_scalar(
-                        f"rollout/dones_{i + 1}", list_of_dones[i], self.num_timesteps,
-                    )
-
-            for i in range(len(list_of_av_speeds)):
-                self.tb_formatter.writer.add_scalar(
-                    f"average_speed_train/average_speed_env_{i+1}",
-                    list_of_av_speeds[i],
-                    self.num_timesteps,
-                )
+            self._tb_writer(
+                list_of_av_speeds, "average_speed_train", "average_speed_env"
+            )
+            self._tb_writer(list_of_x_pos, "positions", "x_pos_of")
+            self._tb_writer(list_of_x_velocities, "velocities", "x_velocity")
+            self._tb_writer(list_of_t_times, "rollout", "total_time")
+            if all(list_of_goal_points):
+                self._tb_writer(list_of_goal_points, "positions", "goal_point")
 
             self.tb_formatter.writer.flush()
             return True
+
+    def _tb_writer(
+        self, list_of_values: List[float], section_name: str, plot_name: str
+    ):
+        for i in range(len(list_of_values)):
+            self.tb_formatter.writer.add_scalar(
+                f"{section_name}/{plot_name}_{i + 1}",
+                list_of_values[i],
+                self.num_timesteps,
+            )
