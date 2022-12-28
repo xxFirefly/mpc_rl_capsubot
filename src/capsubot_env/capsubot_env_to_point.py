@@ -67,6 +67,8 @@ class CapsubotEnvToPoint(CapsubotEnv):
         self.goal_point: Optional[float] = None
         self.goal_point_buffer: List[float] = []
         self.right_termination_point = None
+        self.left_lim: Optional[float] = None
+        self.right_lim: Optional[float] = None
         self._target_state: Optional[np.ndarray] = None
         self.observation: Optional[Dict[str, np.ndarray]] = None
         self.tolerance = tolerance
@@ -99,12 +101,7 @@ class CapsubotEnvToPoint(CapsubotEnv):
         # calling reset method to set the goal_point and values that depends on it
         self.reset()
 
-        # normalize state limit values
-        self.left_lim = self.left_termination_point
-        self.right_lim = self.right_termination_point
-
         # TODO: implement version for training with random goal point and version for validation
-        # TODO: refactor code
         # TODO: add checking acceleration of the center of mass to end episode
 
     def step(self, action):
@@ -141,14 +138,17 @@ class CapsubotEnvToPoint(CapsubotEnv):
         return norm_observation, step_reward, done, info
 
     def reset(self):
-        # randomly spawns the goal_point in interval [0.0, 1.0)
-        self.goal_point = self.random_generator.random()
-        while self.goal_point == 0.0:
-            self.goal_point = self.random_generator.random()
+        # randomly spawns the goal_point in interval [0.2, 2.0)
+        self.goal_point = self.random_generator.uniform(0.2, 2.0)
+        self.goal_point_buffer.append(self.goal_point)
         assert self.goal_point != 0.0, "target point is 0"
 
         self.right_termination_point = self.goal_point + self.termination_distance
-        self.goal_point_buffer.append(self.goal_point)
+
+        # normalize state limit values
+        self.left_lim = self.left_termination_point
+        self.right_lim = self.right_termination_point
+
         self.agent.reset()
         self.agent_state = self.agent.get_state
         self._target_state = np.array([self.goal_point, self.goal_point])
@@ -188,6 +188,9 @@ class CapsubotEnvToPoint(CapsubotEnv):
         """
         state = obs.get("agent")
         target_state = obs.get("target")
+
+        assert self.left_lim and self.right_lim is not None, "norm lims are None!"
+
         norm_agent_state = [
             np.interp(
                 state[0], [self.left_termination_point, self.right_termination_point], [-1.0, 1.0],
