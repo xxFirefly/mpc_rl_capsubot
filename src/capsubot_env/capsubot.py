@@ -29,7 +29,7 @@ class Capsubot:
         self._M = 0.193
         self._m = 0.074
         self._N = (self._M + self._m) * scipy.constants.g
-        # self._mu = 0.29  # coefficient of friction
+        self._mu = 0.29  # coefficient of friction
         self._average_speed = 0.0
         self._force_max = 1.25
         self._total_time = None
@@ -61,7 +61,7 @@ class Capsubot:
             """
             # uncomment this section only if you need to log hi rez values
             # it's very slow
-            
+
             if _ % 5 == 0:
                 self.total_time_buffer.append(self._total_time)
                 self.action_buffer.append(action)
@@ -108,7 +108,7 @@ class Capsubot:
 
     def _mechanical_model(self, obs_state, force):
         x, x_dot, xi, xi_dot = obs_state
-        friction = self._friction_model(self._N, x_dot)
+        friction = self._friction_model(self._mu*self._N, x_dot)
         x_acc = (self._stiffness * xi - force + friction) / self._M
         xi_acc = (-self._stiffness * xi + force) / self._m - x_acc
         return [x_dot, x_acc, xi_dot, xi_acc]
@@ -120,5 +120,5 @@ class Capsubot:
 
     @staticmethod
     @njit()
-    def _friction_model(N: float, velocity) -> float:
-        return -N * 2 / np.pi * np.arctan(velocity * 10e5)
+    def _friction_model(force: float, velocity) -> float:
+        return -force * 2 / np.pi * np.arctan(velocity * 10e5)
