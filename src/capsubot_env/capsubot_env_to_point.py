@@ -59,9 +59,10 @@ class CapsubotEnvToPoint(CapsubotEnv):
     def __init__(
         self,
         tolerance: float = 0.02,  # tolerance to stop point (2 cm)
-        maxlen_counting_speed: int = 10,  # len of velocities buffer
+        maxlen_counting_speed: int = 15,  # len of velocities buffer
         termination_distance: float = 0.08,
         is_render: bool = False,
+        rendering_fps: int = 60,
     ):
         super(CapsubotEnvToPoint, self).__init__()
         self.goal_point: Optional[float] = None
@@ -76,6 +77,7 @@ class CapsubotEnvToPoint(CapsubotEnv):
         self.termination_distance = termination_distance
         self.left_termination_point = -termination_distance
         self.random_generator = self._seed()
+        self.rendering_fps = rendering_fps
 
         self.observation_space = spaces.Dict(
             {
@@ -125,7 +127,6 @@ class CapsubotEnvToPoint(CapsubotEnv):
             "average_speed": self.average_speed,
             "total_time": self.agent.get_total_time,
             "goal_point": self.goal_point,
-
             # uncomment this section only if you need to log hi rez values
             # it's very slow
             #
@@ -138,8 +139,8 @@ class CapsubotEnvToPoint(CapsubotEnv):
         return norm_observation, step_reward, done, info
 
     def reset(self):
-        # randomly spawns the goal_point in interval [0.2, 2.0)
-        self.goal_point = self.random_generator.uniform(0.2, 2.0)
+        # randomly spawns the goal_point in interval [0.2, 1.5)
+        self.goal_point = self.random_generator.uniform(0.2, 1.5)
         self.goal_point_buffer.append(self.goal_point)
         assert self.goal_point != 0.0, "target point is 0"
 
@@ -164,7 +165,12 @@ class CapsubotEnvToPoint(CapsubotEnv):
 
     def render(self, mode="human"):
         if self.viewer:
-            return self.viewer.render(self.agent_state)
+            return self.viewer.render(
+                self.agent.get_total_time,
+                self.agent_state,
+                self.rendering_fps,
+                self.goal_point,
+            )
 
     def _is_inside_target_region(self, current_pos: float) -> bool:
         # if the agent inside the target region
@@ -193,7 +199,9 @@ class CapsubotEnvToPoint(CapsubotEnv):
 
         norm_agent_state = [
             np.interp(
-                state[0], [self.left_termination_point, self.right_termination_point], [-1.0, 1.0],
+                state[0],
+                [self.left_termination_point, self.right_termination_point],
+                [-1.0, 1.0],
             ),
             np.interp(state[1], [-0.36, 0.48], [-1.0, 1.0]),
             np.interp(state[2], [-0.033, 0.04], [-1.0, 1.0]),
@@ -232,12 +240,15 @@ class CapsubotEnvToPoint(CapsubotEnv):
         return reward
 
     def _termination(self, current_pos) -> bool:
-        if (self._is_inside_target_region(current_pos)) and (np.mean(self.velocity_buffer) <= 1e-3):
-            self.done = True
+        done = False
+        if (self._is_inside_target_region(current_pos)) and (
+            np.mean(self.velocity_buffer) <= 1e-3
+        ):
+            done = True
 
         elif self._is_outside_of_working_zone(current_pos):
-            self.done = True
-        return self.done
+            done = True
+        return done
 
     @property
     def _get_observation(self) -> Dict[str, np.ndarray]:
@@ -246,3 +257,136 @@ class CapsubotEnvToPoint(CapsubotEnv):
     @staticmethod
     def _seed(seed=42):
         return np.random.default_rng(seed)
+
+
+class CapsubotEnvToPoint2(CapsubotEnvToPoint):
+    """
+    It differs from the original CapsubotEnvToPoint by observation space
+    and other funcs that depends on observation space.
+    """
+
+    def __init__(
+        self,
+        tolerance: float = 0.02,  # tolerance to stop point (2 cm)
+        maxlen_counting_speed: int = 15,  # len of velocities buffer
+        termination_distance: float = 0.08,
+        is_render: bool = False,
+        rendering_fps: int = 60,
+    ):
+        super(CapsubotEnvToPoint2, self).__init__()
+        self.goal_point: Optional[float] = None
+        self.goal_point_buffer: List[float] = []
+        self.right_termination_point = None
+        self._target_state: Optional[np.ndarray] = None
+        self.observation: Optional[Dict[str, np.ndarray]] = None
+        self.tolerance = tolerance
+        self.velocity_buffer = deque(maxlen=maxlen_counting_speed)
+        self.termination_distance = termination_distance
+        self.left_termination_point = -termination_distance
+        self.random_generator = self._seed()
+        self.rendering_fps = rendering_fps
+
+        self.observation_space = spaces.Dict(
+            {
+                "agent": spaces.Box(
+                    low=np.array([MIN_X, MIN_DX, MIN_XI, MIN_DXI]),
+                    high=np.array([MAX_X, MAX_DX, MAX_XI, MAX_DXI]),
+                    dtype=np.float64,
+                ),
+                "target": spaces.Box(
+                    low=np.array([MIN_GOAL_POINT]),
+                    high=np.array([MAX_GOAL_POINT]),
+                    dtype=np.float64,
+                ),
+            }
+        )
+
+        self.agent = Capsubot(self.dt, self.frame_skip)
+        if is_render:
+            self.viewer = Renderer(f"{self.__class__.__name__}", True)
+        else:
+            self.viewer = None
+
+        # calling reset method to set the goal_point and values that depends on it
+        self.reset()
+
+        # TODO: implement version for training with random goal point and version for validation
+        # TODO: add checking acceleration of the center of mass to end episode
+
+    def step(self, action):
+        err_msg = f"{action!r} ({type(action)}) invalid"
+        assert self.action_space.contains(action), err_msg
+
+        self.agent.step(action)
+        self.agent_state = self.agent.get_state
+        self.average_speed = self.agent.get_average_speed
+
+        x = self.agent_state[0]
+        x_dot = self.agent_state[1]
+        self._target_state = np.array([self.goal_point])
+        self.observation = self._get_observation
+
+        norm_observation = self._normalize_obs(self.observation)
+        step_reward = self._calc_reward(current_pos=x, velocity=x_dot)
+        done = self._termination(current_pos=x)
+        info = {
+            "obs_state": self.observation,
+            "average_speed": self.average_speed,
+            "total_time": self.agent.get_total_time,
+            "goal_point": self.goal_point,
+            # uncomment this section only if you need to log hi rez values
+            # it's very slow
+            #
+            # "total_time_deque": self.agent.get_total_time_buffer,
+            # "action_deque": self.agent.get_action_buffer,
+            # "x_deque": self.agent.get_x_buffer,
+            # "x_dot_deque": self.agent.get_x_dot_buffer,
+        }
+
+        return norm_observation, step_reward, done, info
+
+    def reset(self):
+        # randomly spawns the goal_point in interval [0.2, 1.5)
+        self.goal_point = self.random_generator.uniform(0.2, 1.5)
+        self.goal_point_buffer.append(self.goal_point)
+        assert self.goal_point != 0.0, "target point is 0"
+
+        self.right_termination_point = self.goal_point + self.termination_distance
+
+        self.agent.reset()
+        self.agent_state = self.agent.get_state
+        self._target_state = np.array([self.goal_point])
+        self.observation = self._get_observation
+        self.previous_average_speed = 0.0
+        self.done = False
+
+        if self.viewer:
+            self.viewer.goal_point = self.goal_point
+            self.viewer.tolerance = self.tolerance
+
+        return self.observation
+
+    def _normalize_obs(self, obs: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        """
+        Normalizing reward states because NN inside RL agent works better with normalized inputs.
+        Because we can't know the true thresholds of the model states, we use that wierd interpolation.
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        NOTE: We don't normalize the target state in this version of the env
+        """
+        state = obs.get("agent")
+
+        norm_agent_state = [
+            np.interp(
+                state[0],
+                [self.left_termination_point, self.right_termination_point],
+                [-1.0, 1.0],
+            ),
+            np.interp(state[1], [-0.36, 0.48], [-1.0, 1.0]),
+            np.interp(state[2], [-0.033, 0.04], [-1.0, 1.0]),
+            np.interp(state[3], [-2.36, 2.3], [-1.0, 1.0]),
+        ]
+
+        return {
+            "agent": np.array(norm_agent_state),
+            "target": obs.get("target"),
+        }

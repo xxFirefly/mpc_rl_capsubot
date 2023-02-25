@@ -7,14 +7,14 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 
 from src.capsubot_env.capsubot_env import CapsubotEnv
-from src.capsubot_env.capsubot_env_to_point import CapsubotEnvToPoint
+from src.capsubot_env.capsubot_env_to_point import CapsubotEnvToPoint, CapsubotEnvToPoint2
 from src.capsubot_env.custom_logger import SummaryWriterCallback
 
 # HYPERPARAMS
 # TODO: implement LR schedule
 # TODO: to play with hyperparams more
 N_ENVS: int = 1
-LEARNING_RATE: float = float(3.0e-4)
+LEARNING_RATE: float = float(3.2e-4)
 TIMESTEPS: float = 1e5
 TRAINING_REPS: int = 70
 N_STEPS = 4096
@@ -24,18 +24,18 @@ N_EPOCHS = 10
 # GAE_LAMBDA =
 
 # POLICIES
-POLICY: str = "MlpPolicy"
-# POLICY: str = "MultiInputPolicy"
+# POLICY: str = "MlpPolicy"
+POLICY: str = "MultiInputPolicy"
 
 
 class AgentTrainer:
     def __init__(
         self,
-        is_max_speed_ver: bool,
+        class_name: str,
         rl_model_name: str = "PPO",
         is_multithreading: bool = False,
     ):
-        self.is_max_speed_ver: bool = is_max_speed_ver
+        self.class_name: str = class_name
         self.rl_model_name: str = rl_model_name
         self.is_multithreading: bool = is_multithreading
         self.env = self._pick_version()
@@ -88,7 +88,7 @@ class AgentTrainer:
             # TODO: implement multithreading version
             pass
         else:
-            if self.is_max_speed_ver:
+            if self.class_name == "CapsubotEnv":
                 env = CapsubotEnv()
                 self.sub_dir: str = env.__class__.__name__
 
@@ -97,19 +97,29 @@ class AgentTrainer:
 
                 self.left_term_point: float = env.left_termination_point
                 self.right_term_point: float = env.right_termination_point
-            else:
+            elif self.class_name == "CapsubotEnvToPoint":
                 env = CapsubotEnvToPoint()
                 self.sub_dir: str = env.__class__.__name__
 
-                err_msg: str = "You should use MultiInputPolicy with CapsubotEnvToPoint()"
+                err_msg: str = "You must use MultiInputPolicy with CapsubotEnvToPoint()"
                 assert POLICY == "MultiInputPolicy", err_msg
 
                 # right_term_point is random for this env
                 self.left_term_point: float = env.left_termination_point
+            else:
+                env = CapsubotEnvToPoint2()
+                self.sub_dir: str = env.__class__.__name__
+
+                err_msg: str = "You must use MultiInputPolicy with CapsubotEnvToPoint()"
+                assert POLICY == "MultiInputPolicy", err_msg
+
+                # right_term_point is random for this env
+                self.left_term_point: float = env.left_termination_point
+
         return make_vec_env(lambda: env, n_envs=N_ENVS)
 
     def _pick_tb_log_name(self) -> str:
-        if self.is_max_speed_ver:
+        if self.class_name == "CapsubotEnv":
             if self.left_term_point < 0.0:  # -0.XXX[3:] -> "-XXX"
                 left_term_point: str = "-" + str(self.left_term_point)[3:]
             else:
@@ -126,6 +136,7 @@ class AgentTrainer:
                 left_term_point: str = str(self.left_term_point)[2:]
 
             tensorboard_log_name: str = f"PPO_left_tp({left_term_point})"
+
         return tensorboard_log_name
 
     def _pick_model(self):
@@ -142,4 +153,5 @@ class AgentTrainer:
 
 
 if __name__ == "__main__":
-    AgentTrainer(is_max_speed_ver=True).train()
+    AgentTrainer(class_name="CapsubotEnvToPoint2").train()
+    AgentTrainer(class_name="CapsubotEnvToPoint").train()

@@ -43,7 +43,7 @@ class CapsubotEnv(gym.Env):
     This env supports only human mode rendering or none
     """
 
-    def __init__(self, is_render=False):
+    def __init__(self, is_render=False, rendering_fps: int = 60):
         super(CapsubotEnv, self).__init__()
 
         self.average_speed = 0
@@ -54,10 +54,12 @@ class CapsubotEnv(gym.Env):
         self.dt = self.min_period / self.steps_in_period  # Action force discritization.
         # testing ver where the agent can't take an action more than one time per min_period
         self.frame_skip: int = self.steps_in_period
+        # self.frame_skip = 1
         self.previous_average_speed = 0.0
         self.done = False
         self.left_termination_point: float = -0.05
         self.right_termination_point: float = 0.3
+        self.rendering_fps = rendering_fps
 
         self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Box(
@@ -131,7 +133,6 @@ class CapsubotEnv(gym.Env):
                 "average_speed": self.average_speed,
                 "obs_state": self.agent_state,
                 "total_time": self.agent.get_total_time,
-
                 # uncomment this section only if you need to log hi rez values
                 # it's very slow
                 #
@@ -151,7 +152,11 @@ class CapsubotEnv(gym.Env):
 
     def render(self):
         if self.viewer:
-            return self.viewer.render(self.agent_state)
+            return self.viewer.render(
+                time=self.agent.get_total_time,
+                state=self.agent_state,
+                fps=self.rendering_fps,
+            )
 
     def close(self):
         if self.viewer:

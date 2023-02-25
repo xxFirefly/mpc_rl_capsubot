@@ -7,7 +7,7 @@ import pandas as pd
 
 from src.capsubot_env.capsubot_env import CapsubotEnv
 
-from src.capsubot_env.capsubot_env_to_point import CapsubotEnvToPoint
+from src.capsubot_env.capsubot_env_to_point import CapsubotEnvToPoint, CapsubotEnvToPoint2
 
 # insert into model_path the path to the model *.zip
 # it can't be hardcoded because of using datetime module
@@ -15,8 +15,8 @@ models_dir: str = os.path.join("..", "RL_WIP", "RL_data_store", "models")
 model_path: str = os.path.join(
     models_dir,
     "CapsubotEnvToPoint",
-    "PPO_envs-1_LR-0003_steps-4096_epochs-10_MultiInputPolicy_17-12-2022-08",
-    "3500000",
+    "PPO_envs-1_LR-0003_steps-4096_epochs-10_MultiInputPolicy_22-02-2023-09",
+    "3200000",
 )
 
 
@@ -28,7 +28,7 @@ def printer(array: list) -> None:
 
 model = PPO.load(model_path)
 
-env = CapsubotEnvToPoint(is_render=True)
+env = CapsubotEnvToPoint(is_render=True, rendering_fps=200)
 obs = env.reset()
 n_steps = int(5.0 / env.dt)
 rewards = []
@@ -59,10 +59,15 @@ for step in range(8000):
         print(
             f"Goal reached! reward={reward}, "
             f"at time={info.get('total_time')}, "
-            f"x_pos = {info.get('obs_state')[0]},"
+            f"x_pos = {info.get('obs_state')},"
             # f"x_pos = {info.get('obs_state').get('agent')[0]},"
             f"average_speed = {info.get('average_speed')}"
         )
+
+        try:
+            print(f"{info.get('goal_point')}")
+        except:
+            print("It's max speed version. Here is no goal point")
 
         """
         # only for logging hi rez values
