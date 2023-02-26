@@ -3,6 +3,7 @@ import os
 from stable_baselines3 import PPO
 
 from src.capsubot_env.capsubot_env import CapsubotEnv
+from src.capsubot_env.capsubot_env_to_point import CapsubotEnvToPoint, CapsubotEnvToPoint2
 
 
 def load_and_eval_model(directory: str, env, env_render: bool = False):
@@ -22,6 +23,7 @@ def load_and_eval_model(directory: str, env, env_render: bool = False):
             "RL_WIP",
             "RL_data_store",
             "models",
+            "CapsubotEnvToPoint",
             f"{directory}",
             f"{int(saved_model_name * 1e5)}",
         )
@@ -61,7 +63,7 @@ def eval_model(
     obs = env.reset()
     rewards = []
     actions = [0]
-    for _ in range(3000):
+    for _ in range(20000):  # for ToPoint you must use more timesteps
         action, _state = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         rewards.append(reward)
@@ -92,15 +94,18 @@ def choose_best(models_dict: dict) -> None:
     """
     :returns best model's time and name in terms of average speed
     """
-    key_with_min_value = min(models_dict, key=lambda k: models_dict[k])
-    time = models_dict.get(key_with_min_value)
-    print(f"Best model: {key_with_min_value}, with time: {time}")
+    try:
+        key_with_min_value = min(models_dict, key=lambda k: models_dict[k])
+        time = models_dict.get(key_with_min_value)
+        print(f"Best model: {key_with_min_value}, with time: {time}")
+    except:
+        print("There is no good models in the run")
 
 
 def main() -> None:
-    env = CapsubotEnv()
+    env = CapsubotEnvToPoint()
     good_models, fail_models, eval_info = load_and_eval_model(
-        directory="PPO-n_envs_1_LR_00025_nsteps_409613_09_2022-04", env=env
+        directory="PPO_envs-1_LR-00028_steps-4096_epochs-10_MultiInputPolicy_23-02-2023-11", env=env
     )
     print(f"good_models_dict{good_models}")
     print("__________________________________________")

@@ -8,7 +8,7 @@ class Renderer:
 
     GROUND_LEVEL = 200
     SCREEN_SIZE = (1280, 400)
-    WORLD_WIDTH = 1.0
+    WORLD_WIDTH = 2.0
     SCALE = SCREEN_SIZE[0] / WORLD_WIDTH
 
     CAPSULE_SIZE = (100, 30)
@@ -49,9 +49,12 @@ class Renderer:
             )
         )
 
-    def render(self, state: List[float], fps: int = 60) -> None:
+        # text
+        self.font = pygame.font.SysFont("arial", 22)
+
+    def render(self, time: float, state: List[float], fps: int = 60, goal_point: Optional[float] = None) -> None:
         self._pose_update(state)
-        self._view_update()
+        self._view_update(state, goal_point, time)
         self.clock.tick(fps)
 
     def _draw_ground(self) -> None:
@@ -122,13 +125,32 @@ class Renderer:
         self.capsule_rect.centerx = self.SCREEN_SIZE[0] / 2 + self.SCALE * x
         self.inner_rect.centerx = self.capsule_rect.midtop[0] + self.SCALE * xi
 
-    def _view_update(self) -> None:
+    def _view_update(self, state: List[float], goal_point: Optional[float], time: float) -> None:
         self.screen.fill(self.WHITE)
         self._draw_ground()
         self._draw_robot()
+        self._draw_text_info(state, goal_point, time)
         if self.render_target_region:
             self._draw_target_region()
         pygame.display.update()
+
+    def _draw_text_info(self, state: List[float], goal_point: Optional[float], time: float) -> None:
+        # robot x pose
+        x, _ = self._extract_state(state)
+        pose_text_surf = self.font.render(f"x: {round(x, 5)}", False, self.BLACK)
+        pose_text_rect = pose_text_surf.get_rect(topleft=(20, 20))
+        self.screen.blit(pose_text_surf, pose_text_rect)
+
+        # goal point
+        if goal_point is not None:
+            goal_point_text_surf = self.font.render(f"goal point: {round(goal_point, 3)}", False, self.BLACK)
+            goal_point_text_rect = goal_point_text_surf.get_rect(topleft=(20, 80))
+            self.screen.blit(goal_point_text_surf, goal_point_text_rect)
+
+        # total time
+        total_time_text_surf = self.font.render(f"total time: {round(time, 3)}", False, self.BLACK)
+        total_time_text_rect = total_time_text_surf.get_rect(topleft=(20, 50))
+        self.screen.blit(total_time_text_surf, total_time_text_rect)
 
     @property
     def goal_point(self):
