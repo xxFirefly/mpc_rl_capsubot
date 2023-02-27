@@ -23,7 +23,7 @@ def load_and_eval_model(directory: str, env, env_render: bool = False):
             "RL_WIP",
             "RL_data_store",
             "models",
-            "CapsubotEnvToPoint",
+            "CapsubotEnv",
             f"{directory}",
             f"{int(saved_model_name * 1e5)}",
         )
@@ -103,9 +103,9 @@ def choose_best(models_dict: dict) -> None:
 
 
 def main() -> None:
-    env = CapsubotEnvToPoint()
+    env = CapsubotEnv()
     good_models, fail_models, eval_info = load_and_eval_model(
-        directory="PPO_envs-1_LR-00028_steps-4096_epochs-10_MultiInputPolicy_23-02-2023-11", env=env
+        directory="PPO_envs-1_LR-00025_steps-4096_epochs-10_MlpPolicy_27-02-2023-06", env=env
     )
     print(f"good_models_dict{good_models}")
     print("__________________________________________")

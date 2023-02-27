@@ -14,7 +14,7 @@ from src.capsubot_env.custom_logger import SummaryWriterCallback
 # TODO: implement LR schedule
 # TODO: to play with hyperparams more
 N_ENVS: int = 1
-LEARNING_RATE: float = float(3.2e-4)
+LEARNING_RATE: float = float(2.5e-4)
 TIMESTEPS: float = 1e5
 TRAINING_REPS: int = 70
 N_STEPS = 4096
@@ -24,8 +24,8 @@ N_EPOCHS = 10
 # GAE_LAMBDA =
 
 # POLICIES
-# POLICY: str = "MlpPolicy"
-POLICY: str = "MultiInputPolicy"
+POLICY: str = "MlpPolicy"
+# POLICY: str = "MultiInputPolicy"
 
 
 class AgentTrainer:
@@ -153,5 +153,6 @@ class AgentTrainer:
 
 
 if __name__ == "__main__":
-    AgentTrainer(class_name="CapsubotEnvToPoint2").train()
-    AgentTrainer(class_name="CapsubotEnvToPoint").train()
+    # AgentTrainer(class_name="CapsubotEnvToPoint2").train()
+    # AgentTrainer(class_name="CapsubotEnvToPoint").train()
+    AgentTrainer(class_name="CapsubotEnv").train()

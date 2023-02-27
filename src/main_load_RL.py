@@ -14,9 +14,9 @@ from src.capsubot_env.capsubot_env_to_point import CapsubotEnvToPoint, CapsubotE
 models_dir: str = os.path.join("..", "RL_WIP", "RL_data_store", "models")
 model_path: str = os.path.join(
     models_dir,
-    "CapsubotEnvToPoint",
-    "PPO_envs-1_LR-0003_steps-4096_epochs-10_MultiInputPolicy_22-02-2023-09",
-    "3200000",
+    "CapsubotEnv",
+    "PPO_envs-1_LR-00025_steps-4096_epochs-10_MlpPolicy_27-02-2023-06",
+    "2000000",
 )
 
 
@@ -28,9 +28,8 @@ def printer(array: list) -> None:
 
 model = PPO.load(model_path)
 
-env = CapsubotEnvToPoint(is_render=True, rendering_fps=200)
+env = CapsubotEnv(is_render=True, rendering_fps=120)
 obs = env.reset()
-n_steps = int(5.0 / env.dt)
 rewards = []
 xs = []
 x_dots = []

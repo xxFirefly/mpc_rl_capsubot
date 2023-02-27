@@ -50,10 +50,10 @@ class CapsubotEnv(gym.Env):
         self.agent_state = None
 
         self.steps_in_period = 200
-        self.min_period = 0.01
+        self.min_period = 0.01  # maybe it could be smaller
         self.dt = self.min_period / self.steps_in_period  # Action force discritization.
         # testing ver where the agent can't take an action more than one time per min_period
-        self.frame_skip: int = self.steps_in_period
+        self.frame_skip: int = self.steps_in_period  # should be like min_period / n. Mb smaller than now
         self.previous_average_speed = 0.0
         self.done = False
         self.left_termination_point: float = -0.05
