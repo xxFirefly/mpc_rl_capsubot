@@ -22,19 +22,28 @@ class Capsubot:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
-    def __init__(self, dt: float, frame_skip: int):
-        self._stiffness = 256.23
+    def __init__(self, dt: float, frame_skip: int, model : int = 0):
+        if model == 0:
+            self._stiffness = 256.23
+            self._M = 0.193
+            self._m = 0.074
+            mu = 0.29  # coefficient of friction
+            self._N = mu*(self._M + self._m) * scipy.constants.g
+            self._force_max = 1.25
+        elif model == 1:
+            self._stiffness = 360.0
+            self._M = 0.0213
+            self._m = 0.0231
+            self._N = 0.7
+            self._force_max = 0.8
+        else:
+            raise Exception("Wrong model parameter.")
+
         self._dt = dt
-        self._frame_skip = frame_skip
-        self._M = 0.193
-        self._m = 0.074
-        self._N = (self._M + self._m) * scipy.constants.g
-        self._mu = 0.29  # coefficient of friction
         self._average_speed = 0.0
-        self._force_max = 1.25
+        self._frame_skip = frame_skip
         self._total_time = None
         self._state = None
-
         self.total_time_buffer = deque()
         self.action_buffer = deque()
         self.x_buffer = deque()
@@ -108,7 +117,7 @@ class Capsubot:
 
     def _mechanical_model(self, obs_state, force):
         x, x_dot, xi, xi_dot = obs_state
-        friction = self._friction_model(self._mu*self._N, x_dot)
+        friction = self._friction_model(self._N, x_dot)
         x_acc = (self._stiffness * xi - force + friction) / self._M
         xi_acc = (-self._stiffness * xi + force) / self._m - x_acc
         return [x_dot, x_acc, xi_dot, xi_acc]
