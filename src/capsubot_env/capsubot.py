@@ -4,6 +4,13 @@ from numba import njit
 from collections import deque
 
 
+def classic_force_model(t, T, tau):
+    """
+    Defines electromagnteic force of coil
+    """
+    return (1.0 - 2.0 / np.pi * np.arctan((np.modf(t / T)[0] - tau) * 10.0e5)) / 2.0
+
+
 class Capsubot:
     """
     basic implementation of the capsubot (capsule robot) agent mechanics
@@ -22,13 +29,13 @@ class Capsubot:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
-    def __init__(self, dt: float, frame_skip: int, model : int = 0):
+    def __init__(self, dt: float, frame_skip: int, model: int = 0):
         if model == 0:
             self._stiffness = 256.23
             self._M = 0.193
             self._m = 0.074
             mu = 0.29  # coefficient of friction
-            self._N = mu*(self._M + self._m) * scipy.constants.g
+            self._N = mu * (self._M + self._m) * scipy.constants.g
             self._force_max = 1.25
         elif model == 1:
             self._stiffness = 360.0
@@ -38,6 +45,10 @@ class Capsubot:
             self._force_max = 0.8
         else:
             raise Exception("Wrong model parameter.")
+
+        # Variables for dimmensionless comparison
+        self.omega = np.sqrt(self._stiffness * (self._M + self._m) / self._M / self._m)
+        self.L = self._force_max / self._stiffness
 
         self._dt = dt
         self._average_speed = 0.0
@@ -90,6 +101,21 @@ class Capsubot:
     @property
     def get_state(self) -> np.ndarray:
         return np.array(self._state).astype(np.float64)
+
+    @property
+    def get_dimless_state(self) -> np.ndarray:
+        return np.ndarray(
+            [
+                self._state[0] / self.L,
+                self._state[1] / self.L / self.omega,
+                self._state[2] / self.L,
+                self._state[3] / self.L / self.omega,
+            ]
+        )
+
+    @property
+    def get_dimless_total_time(self) -> float:
+        return self._total_time * self.omega
 
     @property
     def get_average_speed(self) -> float:
