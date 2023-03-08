@@ -2,12 +2,15 @@ import numpy as np
 import scipy.constants
 from numba import njit
 from collections import deque
+from typing import List
 
 
-def classic_force_model(t, T, tau):
+def classic_force_model(t, T, tau, pr=False):
     """
     Defines electromagnteic force of coil
     """
+    if pr:
+        print(f"tau {tau}")
     return (1.0 - 2.0 / np.pi * np.arctan((np.modf(t / T)[0] - tau) * 10.0e5)) / 2.0
 
 
@@ -59,6 +62,7 @@ class Capsubot:
         self.action_buffer = deque()
         self.x_buffer = deque()
         self.x_dot_buffer = deque()
+        self.reset()
 
     def step(self, action) -> None:
         force = self._F_step(action, self._force_max)
@@ -91,12 +95,54 @@ class Capsubot:
 
         self._average_speed = x / self._total_time
 
+    def step_force(self, unit_force) -> None:
+        """
+        Args:
+            unit_force: function with signgle parameter as time in seconds and range of fuction between 0 and 1.
+        Returns:
+            agent state as [time, body_position, body_velocity, inner_body_position, inner_body_velocity]
+        """
+        err_message = "you forgot to call the reset method!"
+        assert self._state is not None, err_message
+
+        for _ in range(self._frame_skip):
+            x, x_dot, xi, xi_dot = self._state
+
+            # Euler kinematic integration.
+            dx = self._mechanical_model(self._state, self._force_max*unit_force(self._total_time))
+            self._state = [
+                x + self._dt * dx[0],
+                x_dot + self._dt * dx[1],
+                xi + self._dt * dx[2],
+                xi_dot + self._dt * dx[3],
+            ]
+            self._total_time = self._total_time + self._dt
+
+            """
+            # uncomment this section only if you need to log hi rez values
+            # it's very slow
+
+            if _ % 5 == 0:
+                self.total_time_buffer.append(self._total_time)
+                self.action_buffer.append(action)
+                self.x_buffer.append(x)
+                self.x_dot_buffer.append(x_dot)
+            """
+
+        self._average_speed = x / self._total_time
+
     def reset(self) -> None:
         self._average_speed = 0.0
         self._total_time = 0.0
         self._state = [0.0, 0.0, 0.0, 0.0]
         self.total_time_buffer.clear()
         self.action_buffer.clear()
+
+    def set_state(self, state : List[float]) -> None:
+        self._state = state.copy()
+
+    def set_time(self, initial_time : float) -> None:
+        self._total_time = initial_time
 
     @property
     def get_state(self) -> np.ndarray:
