@@ -32,7 +32,7 @@ class Capsubot:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
-    def __init__(self, dt: float, frame_skip: int, model: int = 0):
+    def __init__(self, dt: float, frame_skip: int, model: int = 0, log = False):
         if model == 0:
             self._stiffness = 256.23
             self._M = 0.193
@@ -49,6 +49,8 @@ class Capsubot:
         else:
             raise Exception("Wrong model parameter.")
 
+        self.model_type = model
+
         # Variables for dimmensionless comparison
         self.omega = np.sqrt(self._stiffness * (self._M + self._m) / self._M / self._m)
         self.L = self._force_max / self._stiffness
@@ -58,6 +60,7 @@ class Capsubot:
         self._frame_skip = frame_skip
         self._total_time = None
         self._state = None
+        self.log = log
         self.total_time_buffer = deque()
         self.action_buffer = deque()
         self.x_buffer = deque()
@@ -82,16 +85,16 @@ class Capsubot:
             ]
             self._total_time = self._total_time + self._dt
 
-            """
+
             # uncomment this section only if you need to log hi rez values
             # it's very slow
 
-            if _ % 5 == 0:
+            if self.log and _ % 5 == 0:
                 self.total_time_buffer.append(self._total_time)
                 self.action_buffer.append(action)
                 self.x_buffer.append(x)
                 self.x_dot_buffer.append(x_dot)
-            """
+
 
         self._average_speed = x / self._total_time
 
@@ -118,16 +121,14 @@ class Capsubot:
             ]
             self._total_time = self._total_time + self._dt
 
-            """
             # uncomment this section only if you need to log hi rez values
             # it's very slow
 
-            if _ % 5 == 0:
+            if self.log and _ % 5 == 0:
                 self.total_time_buffer.append(self._total_time)
-                self.action_buffer.append(action)
-                self.x_buffer.append(x)
+                self.action_buffer.append(unit_force(self._total_time))
+                self.x_buffer.append([x, x_dot, xi, xi_dot])
                 self.x_dot_buffer.append(x_dot)
-            """
 
         self._average_speed = x / self._total_time
 

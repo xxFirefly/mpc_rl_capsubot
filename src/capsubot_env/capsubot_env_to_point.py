@@ -94,7 +94,7 @@ class CapsubotEnvToPoint(CapsubotEnv):
             }
         )
 
-        self.agent = Capsubot(self.dt, self.frame_skip)
+        self.agent = Capsubot(self.dt, self.frame_skip, model=1)
         if is_render:
             self.viewer = Renderer(f"{self.__class__.__name__}", True)
         else:

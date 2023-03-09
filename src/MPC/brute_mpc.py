@@ -133,8 +133,7 @@ def force_from_encoding(t, T, force_encoding):
     idx = int(fraction * len(force_encoding))
     return force_encoding[idx]
 
-
-def calculate_mpc_action(
+def calculate_mpc_force_max_average(
     current_state: List[float],
     model_type: int,
     duration: int,
@@ -142,46 +141,73 @@ def calculate_mpc_action(
     T: float = 0.1,
     total_time=0.0,
 ) -> float:
-    # sol = None
-    # for idx, force_encoding in enumerate(force_encodings):
-    #     force = lambda t : force_from_encoding(t, T=T, force_encoding=force_encoding)
-    #     state = compute_trajectory(initial_state=current_state, duration=duration, force_func=force, model_type=model_type)
+    sol = None
+    for idx, force_encoding in enumerate(force_encodings):
+        force = lambda t: force_from_encoding(t, T=T, force_encoding=force_encoding)
+        state = compute_trajectory(
+            initial_state=current_state,
+            duration=duration,
+            force_func=force,
+            model_type=model_type,
+            initial_time=total_time,
+        )
 
-    #     mean_velocity = abs((state[1] - current_state[0])/state[0])
+        dist = state[1]
 
-    #     if sol is None:
-    #         sol = (idx, mean_velocity)
-    #         continue
+        if sol is None:
+            sol = (force_encoding, dist)
+            continue
 
-    #     if mean_velocity > sol[1]:
-    #         sol = (idx, mean_velocity)
+        _, best_dist = sol
+        if dist > best_dist:
+            sol = (force_encoding, dist)
 
-    # sol = None
-    # for tau in np.linspace(0.0, 1.0, 11):
-    #     for step in [1, 2]:
-    #         if step == 1:
-    #             force = lambda t : classic_force_model(t + total_time, T=T, tau=tau)
-    #         elif step == 2:
-    #             force = lambda t : 1 - classic_force_model(t + total_time, T=T, tau=tau)
-
-    #         state = compute_trajectory(initial_state=current_state, duration=duration, force_func=force, model_type=model_type)
-
-    #         mean_velocity = abs(state[1]/state[0])
-
-    #         if sol is None:
-    #             sol = [mean_velocity, force, tau]
-
-    #         if mean_velocity > sol[0]:
-    #             sol = [mean_velocity, force, tau]
-
-    # resulted_action = sol[1](t=0)
-    # print(f"action: {resulted_action}, tau: {sol[2]}, vel: {sol[0]}")
-    force = lambda t: classic_force_model(t, T=T, tau=(1 - 0.785))
-    # print(force(0), total_time, T)
+    encoding = sol[0]
+    print(sol)
+    force = lambda t: force_from_encoding(t, T=T, force_encoding=encoding)
     return force
 
 
-def calculate_mpc_force(
+def calculate_mpc_time_optimal(
+    current_state: List[float],
+    model_type: int,
+    duration: int,
+    force_encodings: List[List],
+    T: float = 0.1,
+    total_time=0.0,
+) -> float:
+    target_state = np.array([0.1, 0.0, 0.0, 0.0])
+    P = np.eye(4)
+    P[0,0] = 1000
+    sol = None
+    for idx, force_encoding in enumerate(force_encodings):
+        force = lambda t: force_from_encoding(t, T=T, force_encoding=force_encoding)
+        state = compute_trajectory(
+            initial_state=current_state,
+            duration=duration,
+            force_func=force,
+            model_type=model_type,
+            initial_time=total_time,
+        )
+
+        diff = target_state - state[1:]
+        score = diff.T@P@diff
+
+
+        if sol is None:
+            sol = (force_encoding, score)
+            continue
+
+        _, best_score = sol
+        if score < best_score:
+            sol = (force_encoding, score)
+
+    encoding = sol[0]
+    print(sol)
+    force = lambda t: force_from_encoding(t, T=T, force_encoding=encoding)
+    return force
+
+def calculate_mpc_force_classic(
     current_state: List[float],
     model_type: int,
     duration: int,
@@ -190,33 +216,27 @@ def calculate_mpc_force(
 ) -> float:
 
     sol = None
-    for tau in np.linspace(0.0, 0.5, 101):
-        for step in [1]:
-            if step == 1:
-                force = lambda t, pr=False: classic_force_model(t, T=T, tau=tau, pr=pr)
-            elif step == 2:
-                force = lambda t, pr=False: 1 - classic_force_model(t, T=T, tau=tau, pr=pr)
-            else:
-                raise Exception("Something calculate_mpc_force")
-            state = compute_trajectory(
-                initial_state=current_state, duration=duration, force_func=force, model_type=model_type, initial_time=total_time
-            )
+    for tau in np.linspace(0.0, 0.5, 11):
+        force = lambda t, pr=False: classic_force_model(t, T=T, tau=tau, pr=pr)
+        state = compute_trajectory(
+            initial_state=current_state,
+            duration=duration,
+            force_func=force,
+            model_type=model_type,
+            initial_time=total_time,
+        )
 
-            dist = state[1]
-            if sol is None:
-                sol = [dist, tau, step]
-                continue
+        dist = state[1]
+        if sol is None:
+            sol = [dist, tau]
+            continue
 
-            best_dist, best_tau, best_tep = sol
-            if dist > best_dist:
-                sol = [dist, tau, step]
+        best_dist, _ = sol
+        if dist > best_dist:
+            sol = [dist, tau]
 
-    if sol[2] == 1:
-        force = lambda t, pr=False: classic_force_model(t, T=T, tau=sol[1], pr=pr)
-    elif sol[2] == 2:
-        force = lambda t, pr=False: 1 - classic_force_model(t, T=T, tau=sol[1], pr=pr)
-
-    print(sol, force(t=0, pr=True), force)
+    print(sol)
+    force = lambda t, pr=False: classic_force_model(t, T=T, tau=sol[1], pr=pr)
     return force
 
 
