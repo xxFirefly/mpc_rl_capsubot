@@ -63,9 +63,12 @@ class CapsubotEnvToPoint(CapsubotEnv):
         termination_distance: float = 0.08,
         is_render: bool = False,
         rendering_fps: int = 60,
+        model: int = 0,
+        goal_point: Optional[float] = None,
+        is_inference: bool = False,
     ):
-        super(CapsubotEnvToPoint, self).__init__()
-        self.goal_point: Optional[float] = None
+        super(CapsubotEnvToPoint, self).__init__(is_render, rendering_fps, model)
+        self.goal_point: Optional[float] = goal_point
         self.goal_point_buffer: List[float] = []
         self.right_termination_point = None
         self.left_lim: Optional[float] = None
@@ -77,7 +80,7 @@ class CapsubotEnvToPoint(CapsubotEnv):
         self.termination_distance = termination_distance
         self.left_termination_point = -termination_distance
         self.random_generator = self._seed()
-        self.rendering_fps = rendering_fps
+        self.is_inference = is_inference
 
         self.observation_space = spaces.Dict(
             {
@@ -121,7 +124,8 @@ class CapsubotEnvToPoint(CapsubotEnv):
 
         norm_observation = self._normalize_obs(self.observation)
         step_reward = self._calc_reward(current_pos=x, velocity=x_dot)
-        done = self._termination(current_pos=x)
+        self._termination_checker(x_pose=x)
+
         info = {
             "obs_state": self.observation,
             "average_speed": self.average_speed,
@@ -136,14 +140,15 @@ class CapsubotEnvToPoint(CapsubotEnv):
             # "x_dot_deque": self.agent.get_x_dot_buffer,
         }
 
-        return norm_observation, step_reward, done, info
+        return norm_observation, step_reward, self.done, info
 
     def reset(self):
-        # randomly spawns the goal_point in interval [0.2, 1.5)
-        self.goal_point = self.random_generator.uniform(0.2, 1.5)
-        self.goal_point_buffer.append(self.goal_point)
-        assert self.goal_point != 0.0, "target point is 0"
+        if not self.is_inference:
+            # randomly spawns the goal_point in interval [0.2, 1.5)
+            self.goal_point = self.random_generator.uniform(0.2, 1.5)
+            self.goal_point_buffer.append(self.goal_point)
 
+        assert self.goal_point != 0.0, "target point is 0"
         self.right_termination_point = self.goal_point + self.termination_distance
 
         # normalize state limit values
@@ -229,26 +234,34 @@ class CapsubotEnvToPoint(CapsubotEnv):
                 reward = 2000
             # needs to decrease velocity to reach positive reward
             else:
-                reward = mean_velocity * reward_scale_factor
+                reward = -mean_velocity * reward_scale_factor
 
         elif self._is_outside_of_working_zone(current_pos):
             reward = -2000
-
         # if still not inside the target region
         else:
-            reward = current_pos / self.goal_point
+            current_pos = np.clip(current_pos, 0.05, self.right_termination_point)
+            temp_reward = np.clip((self.goal_point / current_pos), 1.0, 24.0)
+
+            right_boundary_of_norm = self.goal_point / 0.05
+            reward = -(temp_reward - 1.0) / (right_boundary_of_norm - 1.0)
+
+        # if still not inside the target region
+        """
+        else:
+            reward = np.clip(current_pos / self.goal_point, -0.5, 1.0)
+        """
+
         return reward
 
-    def _termination(self, current_pos) -> bool:
-        done = False
-        if (self._is_inside_target_region(current_pos)) and (
+    def _termination_checker(self, x_pose: float) -> None:
+        if (self._is_inside_target_region(x_pose)) and (
             np.mean(self.velocity_buffer) <= 1e-3
         ):
-            done = True
+            self.done = True
 
-        elif self._is_outside_of_working_zone(current_pos):
-            done = True
-        return done
+        elif self._is_outside_of_working_zone(x_pose):
+            self.done = True
 
     @property
     def _get_observation(self) -> Dict[str, np.ndarray]:
@@ -272,19 +285,22 @@ class CapsubotEnvToPoint2(CapsubotEnvToPoint):
         termination_distance: float = 0.08,
         is_render: bool = False,
         rendering_fps: int = 60,
+        model: int = 0,
+        goal_point: Optional[float] = None,
+        is_inference: bool = False,
     ):
-        super(CapsubotEnvToPoint2, self).__init__()
-        self.goal_point: Optional[float] = None
-        self.goal_point_buffer: List[float] = []
-        self.right_termination_point = None
-        self._target_state: Optional[np.ndarray] = None
-        self.observation: Optional[Dict[str, np.ndarray]] = None
-        self.tolerance = tolerance
+        super(CapsubotEnvToPoint2, self).__init__(tolerance,
+                                                  maxlen_counting_speed,
+                                                  termination_distance,
+                                                  is_render,
+                                                  rendering_fps,
+                                                  model,
+                                                  goal_point,
+                                                  is_inference,
+                                                  )
         self.velocity_buffer = deque(maxlen=maxlen_counting_speed)
         self.termination_distance = termination_distance
         self.left_termination_point = -termination_distance
-        self.random_generator = self._seed()
-        self.rendering_fps = rendering_fps
 
         self.observation_space = spaces.Dict(
             {
@@ -328,7 +344,8 @@ class CapsubotEnvToPoint2(CapsubotEnvToPoint):
 
         norm_observation = self._normalize_obs(self.observation)
         step_reward = self._calc_reward(current_pos=x, velocity=x_dot)
-        done = self._termination(current_pos=x)
+        self._termination_checker(x_pose=x)
+
         info = {
             "obs_state": self.observation,
             "average_speed": self.average_speed,
@@ -343,14 +360,15 @@ class CapsubotEnvToPoint2(CapsubotEnvToPoint):
             # "x_dot_deque": self.agent.get_x_dot_buffer,
         }
 
-        return norm_observation, step_reward, done, info
+        return norm_observation, step_reward, self.done, info
 
     def reset(self):
-        # randomly spawns the goal_point in interval [0.2, 1.5)
-        self.goal_point = self.random_generator.uniform(0.2, 1.5)
-        self.goal_point_buffer.append(self.goal_point)
-        assert self.goal_point != 0.0, "target point is 0"
+        if not self.is_inference:
+            # randomly spawns the goal_point in interval [0.2, 1.5)
+            self.goal_point = self.random_generator.uniform(0.2, 1.5)
+            self.goal_point_buffer.append(self.goal_point)
 
+        assert self.goal_point != 0.0, "target point is 0"
         self.right_termination_point = self.goal_point + self.termination_distance
 
         self.agent.reset()

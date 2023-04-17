@@ -3,6 +3,7 @@ import os
 from stable_baselines3 import PPO
 
 from src.capsubot_env.capsubot_env import CapsubotEnv
+from src.capsubot_env.version_for_PWM_func_optimization.capsubot_env_max_speed import CapsubotEnvMk2
 from src.capsubot_env.capsubot_env_to_point import CapsubotEnvToPoint, CapsubotEnvToPoint2
 
 
@@ -23,7 +24,7 @@ def load_and_eval_model(directory: str, env, env_render: bool = False):
             "RL_WIP",
             "RL_data_store",
             "models",
-            "CapsubotEnv",
+            "CapsubotEnvToPoint2",
             f"{directory}",
             f"{int(saved_model_name * 1e5)}",
         )
@@ -63,7 +64,7 @@ def eval_model(
     obs = env.reset()
     rewards = []
     actions = [0]
-    for _ in range(20000):  # for ToPoint you must use more timesteps
+    for _ in range(7000):  # for ToPoint you must use more timesteps
         action, _state = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         rewards.append(reward)
@@ -103,9 +104,9 @@ def choose_best(models_dict: dict) -> None:
 
 
 def main() -> None:
-    env = CapsubotEnv()
+    env = CapsubotEnvToPoint2(model=0, goal_point=0.5, is_inference=True)
     good_models, fail_models, eval_info = load_and_eval_model(
-        directory="PPO_envs-1_LR-00025_steps-4096_epochs-10_MlpPolicy_27-02-2023-06", env=env
+        directory="PPO_envs-1_LR-0002_steps-8192_epochs-10_MultiInputPolicy_14-04-2023-07", env=env
     )
     print(f"good_models_dict{good_models}")
     print("__________________________________________")

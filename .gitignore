@@ -141,3 +141,4 @@ RL_WIP/*.md
 bufer_for_ideas.py
 RL_WIP/RL_vs_old_model.py
 test.py
+force_investigation/robot_dynamics.ipynb
